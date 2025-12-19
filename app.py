@@ -42,6 +42,8 @@ SECTORS = ["DomesTech", "DeepTech", "FinTech", "SaaS/AI"]
 
 COMPANY_STAGES = ["Formation", "Traction"]
 
+CHEQUE_OPTIONS = ["Core", "Traction"]
+
 
 # ---------- Helpers ----------
 def ensure_data_dir():
@@ -113,7 +115,7 @@ def save_to_github() -> tuple[bool, str]:
 PLAYER_COLUMNS = ["player_id", "player_name", "designation", "team"]
 COMPANY_COLUMNS = [
     "company_id", "company_name", "pipeline_stage", "founder_archetype",
-    "sector", "company_stage", "lead", "co_lead", "deal_team"
+    "sector", "company_stage", "cheque", "lead", "co_lead", "deal_team"
 ]
 PORTFOLIO_COLUMNS = [
     "player_id", "player_name", "designation", "companies"
@@ -295,6 +297,7 @@ with tabs[2]:
                 "founder_archetype": st.column_config.TextColumn("Founder Type", width="small"),
                 "sector": st.column_config.TextColumn("Sector", width="small"),
                 "company_stage": st.column_config.TextColumn("Stage", width="small"),
+                "cheque": st.column_config.TextColumn("Cheque", width="small"),
                 "lead": st.column_config.TextColumn("Lead", width="medium"),
                 "co_lead": st.column_config.TextColumn("Co-Lead", width="medium"),
                 "deal_team": st.column_config.TextColumn("Deal Team", width="large"),
@@ -420,7 +423,11 @@ with tabs[4]:
             with col3:
                 company_stage = st.selectbox("Company Stage *", options=COMPANY_STAGES)
 
-            sector = st.selectbox("Sector *", options=SECTORS)
+            col4, col5 = st.columns(2)
+            with col4:
+                sector = st.selectbox("Sector *", options=SECTORS)
+            with col5:
+                cheque = st.selectbox("Cheque *", options=CHEQUE_OPTIONS)
 
             st.markdown("**Deal Team Configuration**")
             col_a, col_b, col_c = st.columns(3)
@@ -449,6 +456,7 @@ with tabs[4]:
                         "founder_archetype": founder_archetype,
                         "sector": sector,
                         "company_stage": company_stage,
+                        "cheque": cheque,
                         "lead": ", ".join(lead),
                         "co_lead": ", ".join(co_lead) if co_lead else "",
                         "deal_team": ", ".join(deal_team) if deal_team else "",
