@@ -6,7 +6,7 @@ from datetime import datetime
 
 # ---------- Config ----------
 st.set_page_config(
-    page_title="Investment Portfolio Tracker",
+    page_title="Dashboard | Blu Funnel Games",
     layout="wide",
     initial_sidebar_state="expanded",
 )
@@ -127,7 +127,7 @@ portfolios_df = load_csv(PORTFOLIOS_CSV, PORTFOLIO_COLUMNS)
 
 
 # ---------- UI: Sidebar ----------
-st.sidebar.title("📊 Investment Portfolio Tracker")
+st.sidebar.title("📊 Blu Funnel Games")
 st.sidebar.markdown("---")
 st.sidebar.subheader("Quick Statistics")
 
@@ -151,7 +151,7 @@ tabs = st.tabs([
 
 # ---------- Overview Tab ----------
 with tabs[0]:
-    st.title("Investment Portfolio Dashboard")
+    st.title("Overview")
 
     col1, col2, col3, col4 = st.columns(4)
     with col1:
