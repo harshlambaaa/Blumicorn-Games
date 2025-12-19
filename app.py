@@ -507,10 +507,14 @@ with tabs[4]:
 
                             # Multiselect for companies
                             company_options = sorted(current_companies_df["company_name"].dropna().tolist())
+
+                            # Filter current companies to only include those that still exist
+                            valid_current_companies = [c for c in current_companies_list if c in company_options]
+
                             selected_companies = st.multiselect(
                                 "Companies",
                                 options=company_options,
-                                default=current_companies_list,
+                                default=valid_current_companies,
                                 key=f"companies_{player['player_id']}",
                                 label_visibility="collapsed"
                             )
