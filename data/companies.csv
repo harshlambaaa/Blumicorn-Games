@@ -1,2 +1,1 @@
-company_id,company_name,sector,notes
-1,MaveHealth,,
+company_id,company_name,pipeline_stage,founder_archetype,sector,company_stage,lead,co_lead,deal_team
