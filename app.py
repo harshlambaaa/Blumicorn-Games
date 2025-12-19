@@ -1,6 +1,8 @@
 import os
 import pandas as pd
 import streamlit as st
+import subprocess
+from datetime import datetime
 
 # ---------- Config ----------
 st.set_page_config(
@@ -78,6 +80,33 @@ def get_partners(players_df: pd.DataFrame) -> list[str]:
 def get_all_players_names(players_df: pd.DataFrame) -> list[str]:
     """Get list of all player names"""
     return sorted(players_df["player_name"].dropna().tolist())
+
+
+def save_to_github() -> tuple[bool, str]:
+    """Commit and push data changes to GitHub"""
+    try:
+        # Add data files
+        subprocess.run(["git", "add", "data/*.csv"], check=True, capture_output=True, text=True)
+
+        # Check if there are changes to commit
+        status = subprocess.run(["git", "status", "--porcelain", "data/"], capture_output=True, text=True)
+        if not status.stdout.strip():
+            return False, "No changes to save"
+
+        # Commit with timestamp
+        commit_msg = f"Update portfolio data - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
+        subprocess.run(["git", "commit", "-m", commit_msg], check=True, capture_output=True, text=True)
+
+        # Push to remote
+        subprocess.run(["git", "push"], check=True, capture_output=True, text=True, timeout=30)
+
+        return True, "Data saved to GitHub successfully!"
+    except subprocess.TimeoutExpired:
+        return False, "Push timed out. Please check your connection."
+    except subprocess.CalledProcessError as e:
+        return False, f"Git error: {e.stderr if e.stderr else 'Unknown error'}"
+    except Exception as e:
+        return False, f"Error: {str(e)}"
 
 
 # ---------- Load data ----------
@@ -311,7 +340,22 @@ with tabs[3]:
 
 # ---------- Admin Tab ----------
 with tabs[4]:
-    st.header("Administration")
+    # Header with save button
+    header_col1, header_col2 = st.columns([3, 1])
+    with header_col1:
+        st.header("Administration")
+    with header_col2:
+        st.write("")  # Spacer for alignment
+        if st.button("💾 Save to GitHub", use_container_width=True, type="primary"):
+            with st.spinner("Saving to GitHub..."):
+                success, message = save_to_github()
+                if success:
+                    st.success(message)
+                else:
+                    if "No changes" in message:
+                        st.info(message)
+                    else:
+                        st.error(message)
 
     admin_subtabs = st.tabs([
         "➕ Add Team Member",
