@@ -1,4 +1,3 @@
-```
 company_id,company_name,pipeline_stage,founder_archetype,sector,company_stage,cheque,lead,co_lead,deal_team
 1,MaveHealth,Wired,,,,Core,Arpit Agarwal,Akhilesh,
 2,Fenado AI,IC,,,,Core,Arpit Agarwal,Sumangal Vinjamuri,
@@ -40,4 +39,3 @@ company_id,company_name,pipeline_stage,founder_archetype,sector,company_stage,ch
 38,RapidxBio,Showcase,,,,Core,Arpit Agarwal,Akhilesh,
 39,Tan90,Showcase,,,,Core,Arpit Agarwal,Akhilesh,
 40,Segwise,Showcase,,,,Core,Sajith Pai,Marmik Mankodi,
-```
