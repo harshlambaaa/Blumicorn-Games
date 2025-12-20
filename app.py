@@ -807,24 +807,13 @@ with tabs[4]:
                     st.plotly_chart(fig_cheque_avg, use_container_width=True)
 
             # Lead-Player Alignment (same pod voting)
-            if 'team' in votes_df.columns and lead_votes:
+            if 'team' in votes_df.columns and 'lead' in votes_df.columns and lead_votes:
                 st.markdown("#### Lead-Player Alignment Analysis")
                 st.caption("Do players vote more for deals led by partners from their own pod?")
 
-                # Merge player teams with lead teams
-                lead_teams = players_df[['player_name', 'team']].rename(columns={'player_name': 'lead', 'team': 'lead_team'})
-                lead_votes_with_teams = pd.DataFrame(lead_votes).merge(lead_teams, on='lead', how='left')
-
-                # Merge with voter teams
-                votes_with_lead = votes_df.merge(
-                    companies_df[['company_name', 'lead']],
-                    on='company_name',
-                    how='left'
-                )
-
-                # Check if same pod
+                # Check if same pod (votes_df already has 'lead' column from earlier merge)
                 alignment_data = []
-                for _, vote in votes_with_lead.iterrows():
+                for _, vote in votes_df.iterrows():
                     if pd.notna(vote['lead']) and vote['lead']:
                         leads = [l.strip() for l in vote['lead'].split(',')]
                         for lead in leads:
