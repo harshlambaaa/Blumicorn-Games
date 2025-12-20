@@ -3,10 +3,13 @@ import pandas as pd
 import streamlit as st
 import subprocess
 from datetime import datetime
+import plotly.express as px
+import plotly.graph_objects as go
+import numpy as np
 
 # ---------- Config ----------
 st.set_page_config(
-    page_title="Investment Portfolio Tracker",
+    page_title="Dashboard | Blu Funnel Games",
     layout="wide",
     initial_sidebar_state="expanded",
 )
@@ -127,7 +130,7 @@ portfolios_df = load_csv(PORTFOLIOS_CSV, PORTFOLIO_COLUMNS)
 
 
 # ---------- UI: Sidebar ----------
-st.sidebar.title("📊 Investment Portfolio Tracker")
+st.sidebar.title("📊 Blu Funnel Games")
 st.sidebar.markdown("---")
 st.sidebar.subheader("Quick Statistics")
 
@@ -145,6 +148,7 @@ tabs = st.tabs([
     "👥 Team Members",
     "🏢 Companies",
     "💼 Model Portfolios",
+    "💡 Insights",
     "⚙️ Admin"
 ])
 
@@ -341,8 +345,522 @@ with tabs[3]:
         st.info("No model portfolio entries yet. Use **Admin → Manage Model Portfolios**.")
 
 
-# ---------- Admin Tab ----------
+# ---------- Insights Tab ----------
 with tabs[4]:
+    st.header("💡 Deal Fantasy League Insights")
+
+    # Prepare vote data from portfolios
+    if len(portfolios_df) == 0 or len(companies_df) == 0:
+        st.info("📊 Add companies and model portfolios to see insights.")
+    else:
+        # Create vote matrix: which players voted for which companies
+        vote_data = []
+        for _, portfolio in portfolios_df.iterrows():
+            player_id = portfolio['player_id']
+            player_name = portfolio['player_name']
+            designation = portfolio['designation']
+            companies_str = portfolio['companies']
+
+            if pd.notna(companies_str) and companies_str:
+                voted_companies = [c.strip() for c in companies_str.split(',')]
+                for company in voted_companies:
+                    vote_data.append({
+                        'player_id': player_id,
+                        'player_name': player_name,
+                        'designation': designation,
+                        'company_name': company
+                    })
+
+        votes_df = pd.DataFrame(vote_data)
+
+        # Merge with company data to get pipeline stages, leads, etc.
+        if len(votes_df) > 0:
+            votes_df = votes_df.merge(
+                companies_df[['company_name', 'pipeline_stage', 'sector', 'cheque', 'lead', 'co_lead']],
+                on='company_name',
+                how='left'
+            )
+
+        # Merge players with designation/team info
+        if len(votes_df) > 0:
+            votes_df = votes_df.merge(
+                players_df[['player_name', 'team']],
+                on='player_name',
+                how='left'
+            )
+
+        # ====================
+        # SECTION 1: Overview Metrics
+        # ====================
+        st.subheader("📊 Overview Metrics")
+
+        total_votes = len(votes_df) if len(votes_df) > 0 else 0
+        total_companies = len(companies_df)
+        total_players = len(players_df)
+
+        # Calculate companies with votes
+        if len(votes_df) > 0:
+            companies_with_votes = votes_df['company_name'].nunique()
+            companies_with_zero_votes = total_companies - companies_with_votes
+            avg_votes_per_company = votes_df.groupby('company_name').size().mean() if len(votes_df) > 0 else 0
+        else:
+            companies_with_votes = 0
+            companies_with_zero_votes = total_companies
+            avg_votes_per_company = 0
+
+        col1, col2, col3, col4, col5 = st.columns(5)
+        col1.metric("Total Votes Cast", total_votes)
+        col2.metric("Companies in Pipeline", total_companies)
+        col3.metric("Players Participating", total_players)
+        col4.metric("Avg Votes per Company", f"{avg_votes_per_company:.1f}")
+        col5.metric("Companies with Zero Votes", companies_with_zero_votes, delta=None if companies_with_zero_votes == 0 else f"-{companies_with_zero_votes}", delta_color="inverse")
+
+        st.markdown("---")
+
+        if len(votes_df) == 0:
+            st.info("No votes cast yet. Assign companies to team members in Model Portfolios to see insights.")
+        else:
+            # ====================
+            # SECTION 2: Vote Distribution Analysis
+            # ====================
+            st.subheader("📈 Vote Distribution Analysis")
+            st.caption("Understanding which companies are getting the most attention from the team")
+
+            # Calculate votes per company
+            company_votes = votes_df.groupby('company_name').size().reset_index(name='votes')
+            company_votes = company_votes.sort_values('votes', ascending=False)
+
+            # Add companies with zero votes
+            all_companies = companies_df[['company_name']].copy()
+            all_companies = all_companies.merge(company_votes, on='company_name', how='left')
+            all_companies['votes'] = all_companies['votes'].fillna(0).astype(int)
+            all_companies = all_companies.sort_values('votes', ascending=False)
+
+            col_a, col_b = st.columns(2)
+
+            with col_a:
+                # Donut chart
+                fig_donut = go.Figure(data=[go.Pie(
+                    labels=all_companies['company_name'],
+                    values=all_companies['votes'],
+                    hole=0.4,
+                    marker=dict(colors=px.colors.sequential.Blues_r),
+                    textinfo='label+percent',
+                    hovertemplate='<b>%{label}</b><br>Votes: %{value}<br>Percentage: %{percent}<extra></extra>'
+                )])
+                fig_donut.update_layout(
+                    title=f"Vote Distribution Across Companies<br><sub>Total Votes: {total_votes}</sub>",
+                    showlegend=False,
+                    height=400
+                )
+                st.plotly_chart(fig_donut, use_container_width=True)
+
+            with col_b:
+                # Horizontal bar chart
+                fig_bar = px.bar(
+                    all_companies,
+                    y='company_name',
+                    x='votes',
+                    orientation='h',
+                    title='Companies Ranked by Votes',
+                    color='votes',
+                    color_continuous_scale='Blues',
+                    labels={'votes': 'Number of Votes', 'company_name': 'Company'}
+                )
+                fig_bar.update_layout(height=400, showlegend=False)
+                st.plotly_chart(fig_bar, use_container_width=True)
+
+            st.markdown("---")
+
+            # ====================
+            # SECTION 3: Pipeline Stage Analysis
+            # ====================
+            st.subheader("🎯 Pipeline Stage Analysis")
+            st.caption("How votes are distributed across different pipeline stages")
+
+            # Merge companies with votes
+            stage_analysis = companies_df.merge(
+                all_companies[['company_name', 'votes']],
+                on='company_name',
+                how='left'
+            )
+            stage_analysis['votes'] = stage_analysis['votes'].fillna(0)
+
+            col_c, col_d = st.columns(2)
+
+            with col_c:
+                # Count companies per stage
+                stage_counts = stage_analysis.groupby('pipeline_stage').size().reset_index(name='count')
+                stage_order = ['Showcase', 'IC', 'Wired']
+                stage_counts['pipeline_stage'] = pd.Categorical(stage_counts['pipeline_stage'], categories=stage_order, ordered=True)
+                stage_counts = stage_counts.sort_values('pipeline_stage')
+
+                fig_stage_count = px.area(
+                    stage_counts,
+                    x='pipeline_stage',
+                    y='count',
+                    title='Number of Companies at Each Stage',
+                    labels={'pipeline_stage': 'Pipeline Stage', 'count': 'Number of Companies'},
+                    markers=True,
+                    color_discrete_sequence=['#1f77b4']
+                )
+                fig_stage_count.update_layout(height=350)
+                st.plotly_chart(fig_stage_count, use_container_width=True)
+
+            with col_d:
+                # Average votes by stage
+                stage_votes_avg = stage_analysis.groupby('pipeline_stage')['votes'].mean().reset_index()
+                stage_votes_avg['pipeline_stage'] = pd.Categorical(stage_votes_avg['pipeline_stage'], categories=stage_order, ordered=True)
+                stage_votes_avg = stage_votes_avg.sort_values('pipeline_stage')
+
+                fig_stage_votes = px.bar(
+                    stage_votes_avg,
+                    x='pipeline_stage',
+                    y='votes',
+                    title='Average Votes by Pipeline Stage',
+                    labels={'pipeline_stage': 'Pipeline Stage', 'votes': 'Avg Votes'},
+                    color='votes',
+                    color_continuous_scale='Blues'
+                )
+                fig_stage_votes.update_layout(height=350, showlegend=False)
+                st.plotly_chart(fig_stage_votes, use_container_width=True)
+
+            # Box plot for vote distribution by stage
+            fig_box = px.box(
+                stage_analysis,
+                x='pipeline_stage',
+                y='votes',
+                title='Vote Distribution Statistics by Pipeline Stage',
+                labels={'pipeline_stage': 'Pipeline Stage', 'votes': 'Votes'},
+                color='pipeline_stage',
+                color_discrete_sequence=px.colors.qualitative.Set2
+            )
+            fig_box.update_layout(height=350, showlegend=False)
+            st.plotly_chart(fig_box, use_container_width=True)
+
+            st.markdown("---")
+
+            # ====================
+            # SECTION 4: Lead & Co-Lead Performance
+            # ====================
+            st.subheader("👔 Lead & Co-Lead Performance")
+            st.caption("How deals led by different partners are performing in votes")
+
+            # Parse leads and co-leads (they're comma-separated)
+            lead_votes = []
+            for _, row in stage_analysis.iterrows():
+                if pd.notna(row['lead']) and row['lead']:
+                    leads = [l.strip() for l in row['lead'].split(',')]
+                    for lead in leads:
+                        lead_votes.append({
+                            'lead': lead,
+                            'pipeline_stage': row['pipeline_stage'],
+                            'votes': row['votes'],
+                            'company': row['company_name']
+                        })
+
+            if lead_votes:
+                lead_votes_df = pd.DataFrame(lead_votes)
+
+                col_e, col_f = st.columns(2)
+
+                with col_e:
+                    # Stagewise vote distribution for leads
+                    lead_stage_votes = lead_votes_df.groupby(['lead', 'pipeline_stage'])['votes'].mean().reset_index()
+                    lead_stage_votes['pipeline_stage'] = pd.Categorical(lead_stage_votes['pipeline_stage'], categories=stage_order, ordered=True)
+
+                    fig_lead_stage = px.bar(
+                        lead_stage_votes,
+                        x='votes',
+                        y='lead',
+                        color='pipeline_stage',
+                        orientation='h',
+                        title='Average Votes by Lead (Stagewise)',
+                        labels={'votes': 'Avg Votes', 'lead': 'Lead'},
+                        color_discrete_sequence=px.colors.qualitative.Set2,
+                        barmode='group'
+                    )
+                    fig_lead_stage.update_layout(height=400)
+                    st.plotly_chart(fig_lead_stage, use_container_width=True)
+
+                with col_f:
+                    # Overall average votes by lead
+                    lead_overall = lead_votes_df.groupby('lead')['votes'].mean().reset_index()
+                    lead_overall = lead_overall.sort_values('votes', ascending=True)
+
+                    fig_lead_overall = px.bar(
+                        lead_overall,
+                        x='votes',
+                        y='lead',
+                        orientation='h',
+                        title='Average Votes by Lead (Overall)',
+                        labels={'votes': 'Avg Votes', 'lead': 'Lead'},
+                        color='votes',
+                        color_continuous_scale='Blues'
+                    )
+                    fig_lead_overall.update_layout(height=400, showlegend=False)
+                    st.plotly_chart(fig_lead_overall, use_container_width=True)
+
+            # Co-Lead analysis
+            co_lead_votes = []
+            for _, row in stage_analysis.iterrows():
+                if pd.notna(row['co_lead']) and row['co_lead']:
+                    co_leads = [c.strip() for c in row['co_lead'].split(',')]
+                    for co_lead in co_leads:
+                        co_lead_votes.append({
+                            'co_lead': co_lead,
+                            'pipeline_stage': row['pipeline_stage'],
+                            'votes': row['votes'],
+                            'company': row['company_name']
+                        })
+
+            if co_lead_votes:
+                co_lead_votes_df = pd.DataFrame(co_lead_votes)
+
+                col_g, col_h = st.columns(2)
+
+                with col_g:
+                    # Stagewise vote distribution for co-leads
+                    co_lead_stage_votes = co_lead_votes_df.groupby(['co_lead', 'pipeline_stage'])['votes'].mean().reset_index()
+                    co_lead_stage_votes['pipeline_stage'] = pd.Categorical(co_lead_stage_votes['pipeline_stage'], categories=stage_order, ordered=True)
+
+                    fig_co_lead_stage = px.bar(
+                        co_lead_stage_votes,
+                        x='votes',
+                        y='co_lead',
+                        color='pipeline_stage',
+                        orientation='h',
+                        title='Average Votes by Co-Lead (Stagewise)',
+                        labels={'votes': 'Avg Votes', 'co_lead': 'Co-Lead'},
+                        color_discrete_sequence=px.colors.qualitative.Pastel,
+                        barmode='group'
+                    )
+                    fig_co_lead_stage.update_layout(height=400)
+                    st.plotly_chart(fig_co_lead_stage, use_container_width=True)
+
+                with col_h:
+                    # Overall average votes by co-lead
+                    co_lead_overall = co_lead_votes_df.groupby('co_lead')['votes'].mean().reset_index()
+                    co_lead_overall = co_lead_overall.sort_values('votes', ascending=True)
+
+                    fig_co_lead_overall = px.bar(
+                        co_lead_overall,
+                        x='votes',
+                        y='co_lead',
+                        orientation='h',
+                        title='Average Votes by Co-Lead (Overall)',
+                        labels={'votes': 'Avg Votes', 'co_lead': 'Co-Lead'},
+                        color='votes',
+                        color_continuous_scale='Teal'
+                    )
+                    fig_co_lead_overall.update_layout(height=400, showlegend=False)
+                    st.plotly_chart(fig_co_lead_overall, use_container_width=True)
+
+            st.markdown("---")
+
+            # ====================
+            # SECTION 5: Player Analytics
+            # ====================
+            st.subheader("🎮 Player Analytics")
+            st.caption("Understanding voting patterns and engagement across team members")
+
+            # Create voting matrix for heatmap
+            vote_matrix = votes_df.pivot_table(
+                index='player_name',
+                columns='company_name',
+                aggfunc='size',
+                fill_value=0
+            )
+
+            # Heatmap
+            fig_heatmap = px.imshow(
+                vote_matrix,
+                labels=dict(x="Company", y="Player", color="Voted"),
+                title="Voting Patterns Heatmap (Player × Company)",
+                color_continuous_scale='Blues',
+                aspect='auto'
+            )
+            fig_heatmap.update_layout(height=max(400, len(vote_matrix) * 30))
+            st.plotly_chart(fig_heatmap, use_container_width=True)
+
+            col_i, col_j = st.columns(2)
+
+            with col_i:
+                # Player activity by designation
+                player_activity = votes_df.groupby(['player_name', 'designation']).size().reset_index(name='votes')
+                player_activity = player_activity.sort_values('votes', ascending=True)
+
+                fig_player_activity = px.bar(
+                    player_activity,
+                    x='votes',
+                    y='player_name',
+                    color='designation',
+                    orientation='h',
+                    title='Number of Companies Voted by Each Player',
+                    labels={'votes': 'Number of Votes', 'player_name': 'Player'},
+                    color_discrete_sequence=px.colors.qualitative.Set3
+                )
+                fig_player_activity.update_layout(height=max(400, len(player_activity) * 25))
+                st.plotly_chart(fig_player_activity, use_container_width=True)
+
+            with col_j:
+                # Designation-wise participation
+                designation_votes = votes_df.groupby('designation').size().reset_index(name='votes')
+
+                fig_designation = go.Figure(data=[go.Pie(
+                    labels=designation_votes['designation'],
+                    values=designation_votes['votes'],
+                    hole=0.4,
+                    marker=dict(colors=px.colors.qualitative.Pastel),
+                    textinfo='label+percent'
+                )])
+                fig_designation.update_layout(
+                    title='Vote Distribution by Designation',
+                    height=400
+                )
+                st.plotly_chart(fig_designation, use_container_width=True)
+
+            # Team/Pod analysis
+            if 'team' in votes_df.columns:
+                team_votes = votes_df.groupby('team').size().reset_index(name='votes')
+                team_votes = team_votes.sort_values('votes', ascending=False)
+
+                fig_team = px.bar(
+                    team_votes,
+                    x='team',
+                    y='votes',
+                    title='Voting Activity by Team/Pod',
+                    labels={'team': 'Team/Pod', 'votes': 'Number of Votes'},
+                    color='votes',
+                    color_continuous_scale='Teal'
+                )
+                fig_team.update_layout(height=350, showlegend=False)
+                fig_team.update_xaxes(tickangle=-45)
+                st.plotly_chart(fig_team, use_container_width=True)
+
+            st.markdown("---")
+
+            # ====================
+            # SECTION 6: Advanced Insights
+            # ====================
+            st.subheader("🔍 Advanced Insights")
+            st.caption("Deep dive into consensus, alignment, and cheque type analysis")
+
+            # Consensus score
+            total_players_count = len(players_df)
+            company_vote_percentage = all_companies.copy()
+            company_vote_percentage['vote_percentage'] = (company_vote_percentage['votes'] / total_players_count * 100).round(1)
+            company_vote_percentage = company_vote_percentage.sort_values('vote_percentage', ascending=False)
+
+            high_consensus = company_vote_percentage[company_vote_percentage['vote_percentage'] >= 50]
+            low_consensus = company_vote_percentage[company_vote_percentage['vote_percentage'] < 20]
+
+            col_k, col_l = st.columns(2)
+
+            with col_k:
+                if len(high_consensus) > 0:
+                    st.success(f"💡 **High Consensus Deals ({len(high_consensus)} companies)**")
+                    st.caption("More than 50% of the team voted for these companies")
+                    for _, row in high_consensus.iterrows():
+                        st.write(f"• **{row['company_name']}** - {row['vote_percentage']}% ({int(row['votes'])} votes)")
+                else:
+                    st.info("No high consensus deals yet (>50% team voting)")
+
+            with col_l:
+                if len(low_consensus) > 0:
+                    st.warning(f"⚠️ **Underrated Companies ({len(low_consensus)} companies)**")
+                    st.caption("Less than 20% of the team voted for these companies")
+                    for _, row in low_consensus.head(5).iterrows():
+                        st.write(f"• **{row['company_name']}** - {row['vote_percentage']}% ({int(row['votes'])} votes)")
+                else:
+                    st.success("All companies have reasonable attention (>20% voting)")
+
+            # Cheque type analysis
+            if 'cheque' in companies_df.columns:
+                cheque_analysis = stage_analysis.groupby('cheque')['votes'].agg(['sum', 'mean', 'count']).reset_index()
+                cheque_analysis.columns = ['Cheque Type', 'Total Votes', 'Avg Votes', 'Count']
+
+                col_m, col_n = st.columns(2)
+
+                with col_m:
+                    fig_cheque_total = px.bar(
+                        cheque_analysis,
+                        x='Cheque Type',
+                        y='Total Votes',
+                        title='Total Votes by Cheque Type',
+                        color='Total Votes',
+                        color_continuous_scale='Blues'
+                    )
+                    fig_cheque_total.update_layout(height=350, showlegend=False)
+                    st.plotly_chart(fig_cheque_total, use_container_width=True)
+
+                with col_n:
+                    fig_cheque_avg = px.bar(
+                        cheque_analysis,
+                        x='Cheque Type',
+                        y='Avg Votes',
+                        title='Average Votes by Cheque Type',
+                        color='Avg Votes',
+                        color_continuous_scale='Teal'
+                    )
+                    fig_cheque_avg.update_layout(height=350, showlegend=False)
+                    st.plotly_chart(fig_cheque_avg, use_container_width=True)
+
+            # Lead-Player Alignment (same pod voting)
+            if 'team' in votes_df.columns and lead_votes:
+                st.markdown("#### Lead-Player Alignment Analysis")
+                st.caption("Do players vote more for deals led by partners from their own pod?")
+
+                # Merge player teams with lead teams
+                lead_teams = players_df[['player_name', 'team']].rename(columns={'player_name': 'lead', 'team': 'lead_team'})
+                lead_votes_with_teams = pd.DataFrame(lead_votes).merge(lead_teams, on='lead', how='left')
+
+                # Merge with voter teams
+                votes_with_lead = votes_df.merge(
+                    companies_df[['company_name', 'lead']],
+                    on='company_name',
+                    how='left'
+                )
+
+                # Check if same pod
+                alignment_data = []
+                for _, vote in votes_with_lead.iterrows():
+                    if pd.notna(vote['lead']) and vote['lead']:
+                        leads = [l.strip() for l in vote['lead'].split(',')]
+                        for lead in leads:
+                            lead_team_data = players_df[players_df['player_name'] == lead]
+                            if len(lead_team_data) > 0:
+                                lead_team = lead_team_data.iloc[0]['team']
+                                voter_team = vote['team']
+                                same_pod = (lead_team == voter_team)
+                                alignment_data.append({
+                                    'same_pod': 'Same Pod' if same_pod else 'Cross-Pod',
+                                    'count': 1
+                                })
+
+                if alignment_data:
+                    alignment_df = pd.DataFrame(alignment_data)
+                    alignment_summary = alignment_df.groupby('same_pod').size().reset_index(name='votes')
+
+                    fig_alignment = px.pie(
+                        alignment_summary,
+                        names='same_pod',
+                        values='votes',
+                        title='Same-Pod vs Cross-Pod Voting',
+                        color_discrete_sequence=px.colors.qualitative.Set2
+                    )
+                    fig_alignment.update_layout(height=350)
+                    st.plotly_chart(fig_alignment, use_container_width=True)
+
+                    same_pod_pct = alignment_summary[alignment_summary['same_pod'] == 'Same Pod']['votes'].sum() / alignment_summary['votes'].sum() * 100
+                    if same_pod_pct > 60:
+                        st.info(f"💡 **Insight:** {same_pod_pct:.1f}% of votes are for deals led by partners from the same pod, showing strong team alignment.")
+                    elif same_pod_pct < 40:
+                        st.success(f"💡 **Insight:** {100-same_pod_pct:.1f}% of votes are cross-pod, showing great cross-functional collaboration!")
+
+
+# ---------- Admin Tab ----------
+with tabs[5]:
     # Header with save button
     header_col1, header_col2 = st.columns([3, 1])
     with header_col1:
