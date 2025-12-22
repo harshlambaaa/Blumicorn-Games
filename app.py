@@ -807,9 +807,9 @@ with tabs[4]:
                     st.plotly_chart(fig_cheque_avg, use_container_width=True)
 
             # Lead-Player Alignment (same pod voting)
-            if 'team' in votes_df.columns and lead_votes:
+            if 'team' in votes_df.columns and lead_votes and 'lead' in votes_df.columns:
                 # Check if we have lead data in votes_df
-                votes_with_lead_data = votes_df[votes_df['lead'].notna()].copy() if 'lead' in votes_df.columns else pd.DataFrame()
+                votes_with_lead_data = votes_df[votes_df['lead'].notna()].copy()
 
                 if len(votes_with_lead_data) > 0:
                     st.markdown("#### Lead-Player Alignment Analysis")
