@@ -807,56 +807,49 @@ with tabs[4]:
                     st.plotly_chart(fig_cheque_avg, use_container_width=True)
 
             # Lead-Player Alignment (same pod voting)
-            if 'team' in votes_df.columns and lead_votes:
-                st.markdown("#### Lead-Player Alignment Analysis")
-                st.caption("Do players vote more for deals led by partners from their own pod?")
+            if 'team' in votes_df.columns and lead_votes and 'lead' in votes_df.columns:
+                # Check if we have lead data in votes_df
+                votes_with_lead_data = votes_df[votes_df['lead'].notna()].copy()
 
-                # Merge player teams with lead teams
-                lead_teams = players_df[['player_name', 'team']].rename(columns={'player_name': 'lead', 'team': 'lead_team'})
-                lead_votes_with_teams = pd.DataFrame(lead_votes).merge(lead_teams, on='lead', how='left')
+                if len(votes_with_lead_data) > 0:
+                    st.markdown("#### Lead-Player Alignment Analysis")
+                    st.caption("Do players vote more for deals led by partners from their own pod?")
 
-                # Merge with voter teams
-                votes_with_lead = votes_df.merge(
-                    companies_df[['company_name', 'lead']],
-                    on='company_name',
-                    how='left'
-                )
+                    # Check if same pod
+                    alignment_data = []
+                    for _, vote in votes_with_lead_data.iterrows():
+                        if vote['lead']:
+                            leads = [l.strip() for l in str(vote['lead']).split(',')]
+                            for lead in leads:
+                                lead_team_data = players_df[players_df['player_name'] == lead]
+                                if len(lead_team_data) > 0:
+                                    lead_team = lead_team_data.iloc[0]['team']
+                                    voter_team = vote['team']
+                                    same_pod = (lead_team == voter_team)
+                                    alignment_data.append({
+                                        'same_pod': 'Same Pod' if same_pod else 'Cross-Pod',
+                                        'count': 1
+                                    })
 
-                # Check if same pod
-                alignment_data = []
-                for _, vote in votes_with_lead.iterrows():
-                    if pd.notna(vote['lead']) and vote['lead']:
-                        leads = [l.strip() for l in vote['lead'].split(',')]
-                        for lead in leads:
-                            lead_team_data = players_df[players_df['player_name'] == lead]
-                            if len(lead_team_data) > 0:
-                                lead_team = lead_team_data.iloc[0]['team']
-                                voter_team = vote['team']
-                                same_pod = (lead_team == voter_team)
-                                alignment_data.append({
-                                    'same_pod': 'Same Pod' if same_pod else 'Cross-Pod',
-                                    'count': 1
-                                })
+                    if alignment_data:
+                        alignment_df = pd.DataFrame(alignment_data)
+                        alignment_summary = alignment_df.groupby('same_pod').size().reset_index(name='votes')
 
-                if alignment_data:
-                    alignment_df = pd.DataFrame(alignment_data)
-                    alignment_summary = alignment_df.groupby('same_pod').size().reset_index(name='votes')
+                        fig_alignment = px.pie(
+                            alignment_summary,
+                            names='same_pod',
+                            values='votes',
+                            title='Same-Pod vs Cross-Pod Voting',
+                            color_discrete_sequence=px.colors.qualitative.Set2
+                        )
+                        fig_alignment.update_layout(height=350)
+                        st.plotly_chart(fig_alignment, use_container_width=True)
 
-                    fig_alignment = px.pie(
-                        alignment_summary,
-                        names='same_pod',
-                        values='votes',
-                        title='Same-Pod vs Cross-Pod Voting',
-                        color_discrete_sequence=px.colors.qualitative.Set2
-                    )
-                    fig_alignment.update_layout(height=350)
-                    st.plotly_chart(fig_alignment, use_container_width=True)
-
-                    same_pod_pct = alignment_summary[alignment_summary['same_pod'] == 'Same Pod']['votes'].sum() / alignment_summary['votes'].sum() * 100
-                    if same_pod_pct > 60:
-                        st.info(f"💡 **Insight:** {same_pod_pct:.1f}% of votes are for deals led by partners from the same pod, showing strong team alignment.")
-                    elif same_pod_pct < 40:
-                        st.success(f"💡 **Insight:** {100-same_pod_pct:.1f}% of votes are cross-pod, showing great cross-functional collaboration!")
+                        same_pod_pct = alignment_summary[alignment_summary['same_pod'] == 'Same Pod']['votes'].sum() / alignment_summary['votes'].sum() * 100
+                        if same_pod_pct > 60:
+                            st.info(f"💡 **Insight:** {same_pod_pct:.1f}% of votes are for deals led by partners from the same pod, showing strong team alignment.")
+                        elif same_pod_pct < 40:
+                            st.success(f"💡 **Insight:** {100-same_pod_pct:.1f}% of votes are cross-pod, showing great cross-functional collaboration!")
 
 
 # ---------- Admin Tab ----------
